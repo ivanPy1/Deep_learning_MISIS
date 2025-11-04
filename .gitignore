@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+hwvenv/
+homework_1_pytorch_lightning/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data and models
+data/
+*.csv
+*.json
+models/
+checkpoints/
+
+# Logs
+logs/
+lightning_logs/
+runs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PyTorch specific
+*.pth
+*.bin
