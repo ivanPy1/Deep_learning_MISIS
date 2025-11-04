@@ -9,8 +9,8 @@
 
 
 **Основные задачи:**
-- Реализация класса для управления данными - WineDataModule
-- Реализация NeuralNetLightning - модель на PyTorch Lightning с методами:
+- Реализация класса для управления данными - **WineDataModule**
+- Реализация **NeuralNetLightning** - модель на PyTorch Lightning с методами:
    - `__init__` - инициализация модели и параметров
    - `forward` - прямой проход
    - `training_step` - шаг обучения
