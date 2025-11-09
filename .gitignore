@@ -8,7 +8,6 @@ env/
 venv/
 .venv/
 hwvenv/
-homework_1_pytorch_lightning/
 
 # Jupyter
 .ipynb_checkpoints/
