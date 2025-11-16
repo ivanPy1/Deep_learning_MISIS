@@ -27,15 +27,9 @@
 - Learning rate
 - Оптимизатор
 
-### Реализовано отслеживание
-
-- F1 score для каждого класса
-- Confusion matrix
-
-
 ### Проект использует:
 - BaseLightningModule из lightning_module.py
-- sklearn.utils.class_weight.compute_class_weight для вычисления весов классов используется 
+- F1-оптимизированные веса 
 - early stopping для предотвращения переобучения
 
 ## Структура проекта
