@@ -21,3 +21,28 @@
 **Технологии:** Python, PyTorch Lightning, PyTorch, scikit-learn, NumPy, matplotlib
 
 ---
+
+### 🏠 Homework 2: Multi-Branch MLP для классификации Wine Quality
+**Цель:** Достижение F1-score (macro) не менее 40% через использование продвинутой архитектуры и методов борьбы с дисбалансом классов
+
+**Multi-Branch MLP модель:**
+- Реализована архитектура с тремя параллельными ветками:
+  - **Bottleneck Branch** - сужение размерности (dim → dim//4 → dim)
+  - **Inverted Bottleneck Branch** - расширение размерности (dim → dim×4 → dim)
+  - **Regular Branch** - обычный residual блок (dim → hidden_dim → dim)
+- Модель принимает вход, проецирует в hidden_dim, пропускает через ветки и объединяет результаты через конкатенацию или суммирование
+
+**Оптимизация гиперпараметров:**
+- Подбор глубины модели (num_blocks)
+- Подбор ширины модели (hidden_dim)
+- Выбор learning rate
+- Выбор оптимизатора
+
+**Мониторинг метрик:**
+- Отслеживание F1 score для каждого класса
+- Построение confusion matrix
+- Использование weighted loss для борьбы с дисбалансом классов
+
+**Технологии:** Python, PyTorch Lightning, PyTorch, scikit-learn, NumPy, matplotlib
+
+---

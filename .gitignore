@@ -36,3 +36,6 @@ Thumbs.db
 # PyTorch specific
 *.pth
 *.bin
+
+# Other
+homework_2_multi_branch_classification/best_params.txt
