@@ -46,3 +46,36 @@
 **Технологии:** Python, PyTorch Lightning, PyTorch, scikit-learn, NumPy, matplotlib
 
 ---
+
+### 🏠 Homework 3: Semi-Supervised Learning с Multi-Branch MLP
+
+**Цель:** Достижение F1-score (macro) ≥ 32% через использование semi-supervised методов и продвинутых архитектур для работы с частично размеченными данными
+
+**Multi-Branch MLP модель:**
+- Реализована архитектура с тремя параллельными ветками:
+  - **Bottleneck Branch** - сужение размерности (dim → dim//4 → dim)
+  - **Inverted Bottleneck Branch** - расширение размерности (dim → dim×4 → dim)
+  - **Regular Branch** - обычный residual блок (dim → hidden_dim → dim)
+- Модель принимает вход, проецирует в hidden_dim, пропускает через ветки и объединяет результаты через конкатенацию или суммирование
+
+**Semi-Supervised Learning методы:**
+- **Pseudo-labeling** - автоматическая разметка неразмеченных данных с высокой уверенностью предсказания
+- **Consistency Regularization** - обучение устойчивости к аугментациям и шуму
+- **Mean Teacher** - модель учитель-ученик для стабильного обучения
+- Использование **train_unlabeled.csv** (4000 samples) вместе с **train_labeled.csv** (1600 samples)
+
+**Оптимизация гиперпараметров:**
+- Подбор глубины модели (num_blocks)
+- Подбор ширины модели (hidden_dim)
+- Выбор learning rate и scheduler
+- Выбор оптимизатора
+- Настройка веса consistency loss
+- Порог уверенности для pseudo-labeling
+
+**Мониторинг метрик:**
+- Отслеживание F1 macro - основной целевой метрики
+- Построение confusion matrix
+- Использование weighted loss для борьбы с дисбалансом классов
+- Сравнение с baseline результатом (~0.27 F1 macro)
+
+**Технологии:** Python, PyTorch Lightning, PyTorch, scikit-learn, NumPy, matplotlib
