@@ -71,10 +71,4 @@
 - Настройка веса consistency loss
 - Порог уверенности для pseudo-labeling
 
-**Мониторинг метрик:**
-- Отслеживание F1 macro - основной целевой метрики
-- Построение confusion matrix
-- Использование weighted loss для борьбы с дисбалансом классов
-- Сравнение с baseline результатом (~0.27 F1 macro)
-
 **Технологии:** Python, PyTorch Lightning, PyTorch, scikit-learn, NumPy, matplotlib
