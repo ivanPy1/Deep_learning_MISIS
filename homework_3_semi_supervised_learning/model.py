@@ -8,6 +8,7 @@ class BaseMLPBlock(nn.Module, ABC):
     def __init__(self, dim, activation='gelu', dropout=0.0):
         super().__init__()
         self.dim = dim
+        self.norm = nn.BatchNorm1d(dim)
         self.activation = {'relu': nn.ReLU(), 'gelu': nn.GELU(), 'swish': nn.SiLU()}.get(activation, nn.GELU())
         self.dropout = nn.Dropout(dropout) if dropout > 0 else None
     
@@ -21,17 +22,20 @@ class BottleneckBlock(BaseMLPBlock):
         super().__init__(dim, activation, dropout)
         self.bottleneck_dim = max(dim // 4, 1)
         self.fc1 = nn.Linear(self.dim, self.bottleneck_dim)
+        self.bn1 = nn.BatchNorm1d(self.bottleneck_dim)
         self.fc2 = nn.Linear(self.bottleneck_dim, self.dim)
-        self.layer_norm = nn.LayerNorm(self.dim)
     
     def forward(self, x):
         identity = x
-        out = self.layer_norm(x)
+        
+        out = self.norm(x)
         out = self.fc1(out)
+        out = self.bn1(out)
         out = self.activation(out)
         if self.dropout:
             out = self.dropout(out)
         out = self.fc2(out)
+        
         return out + identity
 
 
@@ -40,17 +44,20 @@ class InvertedBottleneckBlock(BaseMLPBlock):
         super().__init__(dim, activation, dropout)
         self.expanded_dim = dim * expansion_factor
         self.fc1 = nn.Linear(self.dim, self.expanded_dim)
+        self.bn1 = nn.BatchNorm1d(self.expanded_dim)
         self.fc2 = nn.Linear(self.expanded_dim, self.dim)
-        self.layer_norm = nn.LayerNorm(self.dim)
     
     def forward(self, x):
         identity = x
-        out = self.layer_norm(x)
+        
+        out = self.norm(x)
         out = self.fc1(out)
+        out = self.bn1(out)
         out = self.activation(out)
         if self.dropout:
             out = self.dropout(out)
         out = self.fc2(out)
+        
         return out + identity
 
 
@@ -59,17 +66,20 @@ class RegularBlock(BaseMLPBlock):
         super().__init__(dim, activation, dropout)
         self.hidden_dim = hidden_dim if hidden_dim else dim * 2
         self.fc1 = nn.Linear(self.dim, self.hidden_dim)
+        self.bn1 = nn.BatchNorm1d(self.hidden_dim)
         self.fc2 = nn.Linear(self.hidden_dim, self.dim)
-        self.layer_norm = nn.LayerNorm(self.dim)
     
     def forward(self, x):
         identity = x
-        out = self.layer_norm(x)
+        
+        out = self.norm(x)
         out = self.fc1(out)
+        out = self.bn1(out)
         out = self.activation(out)
         if self.dropout:
             out = self.dropout(out)
         out = self.fc2(out)
+        
         return out + identity
 
 
@@ -79,8 +89,8 @@ class MultiBranchMLP(nn.Module):
         input_dim,
         hidden_dim,
         output_dim,
-        num_blocks=6, 
-        dropout=0.2,
+        num_blocks=4,
+        dropout=0.1,
         combine_mode='concat'
     ):
         super().__init__()
@@ -89,9 +99,9 @@ class MultiBranchMLP(nn.Module):
         
         self.input_proj = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.GELU(),
-            nn.Dropout(dropout),
-            nn.LayerNorm(hidden_dim)
+            nn.Dropout(dropout)
         )
         
         self.bottleneck_branch = nn.ModuleList([
@@ -115,24 +125,9 @@ class MultiBranchMLP(nn.Module):
             output_proj_input_dim = hidden_dim
         
         self.output_proj = nn.Sequential(
-            nn.LayerNorm(output_proj_input_dim),
-            nn.Linear(output_proj_input_dim, output_proj_input_dim // 2),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(output_proj_input_dim // 2, output_dim)
+            nn.BatchNorm1d(output_proj_input_dim),
+            nn.Linear(output_proj_input_dim, output_dim)
         )
-        
-        # Инициализация весов
-        self.apply(self._init_weights)
-    
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            torch.nn.init.xavier_uniform_(module.weight)
-            if module.bias is not None:
-                torch.nn.init.constant_(module.bias, 0)
-        elif isinstance(module, nn.LayerNorm):
-            torch.nn.init.constant_(module.bias, 0)
-            torch.nn.init.constant_(module.weight, 1.0)
     
     def forward(self, x):
         x = self.input_proj(x)

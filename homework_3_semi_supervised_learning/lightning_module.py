@@ -18,14 +18,14 @@ class SemiSupervisedLightningModule(pl.LightningModule):
         self,
         model,
         loss_fn,
-        optimizer_type='adam',
+        optimizer_type='adamw',
         learning_rate=1e-3,
         optimizer_kwargs=None,
-        task_type='regression',
+        task_type='multiclass',
         metrics_to_log=None,
-        use_pseudo_labeling=True,
+        pseudo_label_threshold=0.95,
         consistency_weight=0.3,
-        temperature=0.5
+        warmup_epochs=10
     ):
         super().__init__()
         self.model = model
@@ -34,10 +34,15 @@ class SemiSupervisedLightningModule(pl.LightningModule):
         self.learning_rate = learning_rate
         self.optimizer_kwargs = optimizer_kwargs or {}
         self.task_type = task_type
-        self.use_pseudo_labeling = use_pseudo_labeling
-        self.consistency_weight = consistency_weight
-        self.temperature = temperature
         
+
+        self.pseudo_label_threshold = pseudo_label_threshold
+        self.consistency_weight = consistency_weight
+        self.warmup_epochs = warmup_epochs
+        
+        if 'weight_decay' not in self.optimizer_kwargs:
+             self.optimizer_kwargs['weight_decay'] = 1e-4
+
         if metrics_to_log is None:
             if task_type == 'regression':
                 self.metrics_to_log = ['mse', 'mae', 'rmse', 'r2']
@@ -55,7 +60,7 @@ class SemiSupervisedLightningModule(pl.LightningModule):
         
         self.train_losses = []
         self.val_losses = []
-        self.consistency_losses = []
+        self.save_hyperparameters()
     
     def _setup_metrics(self):
         if self.task_type == 'regression':
@@ -93,50 +98,40 @@ class SemiSupervisedLightningModule(pl.LightningModule):
         return self.model(x)
     
     def training_step(self, batch, batch_idx):
-        if isinstance(batch, list) and len(batch) == 2:
-            # Semi-supervised режим
-            labeled_batch, unlabeled_batch = batch
-            x_labeled, y_labeled = labeled_batch
-            x_unlabeled = unlabeled_batch
+        labeled_x, labeled_y = batch['labeled']
+        labeled_output = self.forward(labeled_x)
+        supervised_loss = self.loss_fn(labeled_output, labeled_y)
+        
+
+        total_loss = supervised_loss
+        pseudo_labels_used = 0
+        
+        if batch['unlabeled'] is not None:
+            unlabeled_x = batch['unlabeled']
             
-            # Обучение на размеченных данных
-            y_hat_labeled = self.forward(x_labeled)
-            supervised_loss = self.loss_fn(y_hat_labeled, y_labeled)
-            
-            # Псевдо-разметка для неразмеченных данных
-            consistency_loss = 0
-            if self.use_pseudo_labeling and x_unlabeled.shape[0] > 0:
+            if self.current_epoch >= self.warmup_epochs:
                 with torch.no_grad():
-                    logits_unlabeled = self.forward(x_unlabeled)
-                    pseudo_labels = torch.softmax(logits_unlabeled / self.temperature, dim=1)
-                    confident_mask = (pseudo_labels.max(dim=1)[0] > 0.7)
+                    unlabeled_output = self.forward(unlabeled_x)
+                    unlabeled_probs = torch.softmax(unlabeled_output, dim=1)
+                    max_probs, pseudo_labels = torch.max(unlabeled_probs, dim=1)
                     
-                    if confident_mask.sum() > 0:
-                        x_confident = x_unlabeled[confident_mask]
-                        pseudo_labels_confident = pseudo_labels[confident_mask]
+                    confidence_mask = max_probs > self.pseudo_label_threshold
+                    
+                    if confidence_mask.sum() > 0:
+                        confident_x = unlabeled_x[confidence_mask]
+                        confident_pseudo_labels = pseudo_labels[confidence_mask]
                         
-                        # Аугментация - добавление шума
-                        x_augmented = x_confident + torch.randn_like(x_confident) * 0.1
-                        logits_augmented = self.forward(x_augmented)
+                        confident_output = self.forward(confident_x)
+                        unsupervised_loss = self.loss_fn(confident_output, confident_pseudo_labels)
                         
-                        consistency_loss = nn.functional.kl_div(
-                            nn.functional.log_softmax(logits_augmented / self.temperature, dim=1),
-                            pseudo_labels_confident,
-                            reduction='batchmean'
-                        )
+                        current_weight = self.consistency_weight * min(1.0, (self.current_epoch - self.warmup_epochs) / 50.0)
+                        total_loss = supervised_loss + current_weight * unsupervised_loss
+                        pseudo_labels_used = confidence_mask.sum().item()
             
-            total_loss = supervised_loss + self.consistency_weight * consistency_loss
-            
-            self.log('train_supervised_loss', supervised_loss, on_step=True, on_epoch=True, prog_bar=True)
-            self.log('train_consistency_loss', consistency_loss, on_step=True, on_epoch=True, prog_bar=True)
-            self.log('train_total_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
-            
-        else:
-            # Обычный supervised режим
-            x, y = batch
-            y_hat = self.forward(x)
-            total_loss = self.loss_fn(y_hat, y)
-            self.log('train_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('train_pseudo_labels_used', pseudo_labels_used, on_step=True, on_epoch=True, prog_bar=True)
+        
+        self.log('train_supervised_loss', supervised_loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_total_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
         
         return total_loss
     
@@ -189,13 +184,12 @@ class SemiSupervisedLightningModule(pl.LightningModule):
                         pass
             if metrics_str and self.trainer is not None:
                 print(f"Epoch {self.current_epoch}: " + ", ".join(metrics_str))
+            
+            for metric in self.metrics.values():
+                metric.reset()
     
     def configure_optimizers(self):
-        optimizer_kwargs = {
-            'lr': self.learning_rate,
-            'weight_decay': 1e-4,  # Добавим L2 регуляризацию
-            **self.optimizer_kwargs
-        }
+        optimizer_kwargs = {'lr': self.learning_rate, **self.optimizer_kwargs}
         
         if self.optimizer_type == 'sgd':
             optimizer = optim.SGD(self.parameters(), **optimizer_kwargs)
@@ -209,22 +203,18 @@ class SemiSupervisedLightningModule(pl.LightningModule):
             optimizer = optim.Adagrad(self.parameters(), **optimizer_kwargs)
         else:
             raise ValueError(f"Неизвестный оптимизатор: {self.optimizer_type}")
-        
-        # Добавим scheduler для лучшей сходимости
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, 
-            T_max=self.trainer.max_epochs if self.trainer else 100,
-            eta_min=1e-6
-        )
-        
-        return {
-            'optimizer': optimizer,
-            'lr_scheduler': {
-                'scheduler': scheduler,
-                'interval': 'epoch',
-                'frequency': 1
-            }
+            
+        scheduler = {
+            'scheduler': optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, 
+                T_max=self.trainer.max_epochs,
+                eta_min=1e-6
+            ),
+            'interval': 'epoch',
+            'frequency': 1
         }
+        
+        return {'optimizer': optimizer, 'lr_scheduler': scheduler}
     
     def on_test_start(self):
         for metric in self.metrics.values():

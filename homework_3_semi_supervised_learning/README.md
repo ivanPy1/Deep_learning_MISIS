@@ -4,41 +4,49 @@
 
 Реализация semi-supervised learning подхода с multi-branch нейронной сетью для мультиклассовой классификации. Основная цель - достижение F1-score (macro) не менее 32% через использование как размеченных, так и неразмеченных данных и методов борьбы с дисбалансом классов.
 
-## Что сделано
-
 ### Multi-Branch MLP с Semi-Supervised Learning
 
-Реализована модель с тремя параллельными ветками, расширенная для semi-supervised обучения:
+Реализована улучшенная архитектура **MultiBranchMLP** с тремя параллельными ветками, каждая с BatchNorm и residual connections:
 
-- **Bottleneck Branch** - сужение размерности (dim → dim//4 → dim)
-- **Inverted Bottleneck Branch** - расширение размерности (dim → dim×4 → dim) 
-- **Regular Branch** - обычный residual блок (dim → hidden_dim → dim)
+- **Bottleneck Branch** - сужение размерности (dim → dim//4 → dim) с BatchNorm на каждом слое
+- **Inverted Bottleneck Branch** - расширение размерности (dim → dim×4 → dim) с BatchNorm на каждом слое  
+- **Regular Branch** - обычный residual блок (dim → hidden_dim×2 → dim) с BatchNorm на каждом слое
 
-```Multi-Branch MLP```:
-- Принимает вход и проецирует в hidden_dim
-- Пропускает через три параллельные ветки (каждая из num_blocks блоков своего типа)
-- Объединяет результаты через конкатенацию (concat) или суммирование (sum)
-- Проецирует в выходную размерность
+Архитектурные особенности:
+- Входная проекция: Linear → BatchNorm1d → GELU → Dropout
+- Параллельная обработка через три ветки (по 4 блока каждая)
+- Объединение через конкатенацию (`concat`) или суммирование
+- Выходная проекция: BatchNorm1d → Linear
 
-### Semi-Supervised методы:
+### Semi-Supervised методы
 
-- **Pseudo-labeling** - автоматическая разметка неразмеченных данных
-- **Consistency Regularization** - обучение устойчивости к аугментациям
+Реализована стратегия **Pseudo-labeling** с адаптивным взвешиванием:
 
-### Подобраны оптимальные значения:
+- **Confidence-based Filtering**: использование только предсказаний с уверенностью > 0.95
+- **Curriculum Learning**: 10 эпох warmup только на размеченных данных
+- **Progressive Weighting**: постепенное увеличение веса unsupervised loss от 0 до 0.3
+- **Adaptive Thresholding**: `pseudo_label_threshold=0.95` для качества псевдометок
 
-- Глубина модели (num_blocks)
-- Ширина модели (hidden_dim) 
-- Learning rate и scheduler
-- Оптимизатор
-- Вес consistency loss
-- Порог уверенности для pseudo-labeling
+### Подобраны оптимальные значения
 
-### Проект использует:
-- BaseLightningModule из lightning_module.py
-- F1-оптимизированные веса 
-- Early stopping для предотвращения переобучения
-- Semi-supervised стратегии для использования неразмеченных данных
+Гиперпараметры, настроенные для стабильного обучения:
+
+- **Архитектура**: `num_blocks=4`, `dropout=0.1`, `combine_mode='concat'`
+- **Оптимизация**: `learning_rate=1e-3`, `AdamW` с `weight_decay=1e-4`
+- **Scheduling**: `CosineAnnealingLR` с `eta_min=1e-6`
+- **SSL параметры**: `pseudo_label_threshold=0.95`, `consistency_weight=0.3`, `warmup_epochs=10`
+- **Data loading**: `batch_size=256`, `unlabeled_batch_ratio=2`
+
+### Проект использует
+
+**Ключевые компоненты системы:**
+
+- **SemiSupervisedDataModule** - обработка размеченных и неразмеченных данных с параллельными DataLoader'ами
+- **SemiSupervisedLightningModule** - обучение с псевдоразметкой и прогрессивным взвешиванием
+- **MultiBranchMLP** - улучшенная архитектура с BatchNorm и residual connections
+- **Comprehensive Metrics** - F1-macro, accuracy для multiclass классификации
+- **Error Handling** - устойчивая загрузка данных с обработкой исключений
+- **Memory Optimization** - очистка pandas DataFrame после создания тензоров
 
 ## Структура проекта
 ```text
