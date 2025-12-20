@@ -36,7 +36,11 @@
 ```text
 homework_2_multi_branch_classification/
 ├── hw_multi_branch_classification.ipynb # Основной ноутбук с реализацией
-├── lightning_module.py # содежит BaseLightningModule для обучения моделей в PyTorch Lightning
-├── requirements.txt # Список Python-пакетов и их версий, необходимых для запуска
-└── README.md # Документация
+├── lightning_module.py 
+├── mlp_model.py 
+├── model.py 
+├── utils.py 
+├── wine_quality_data.py 
+├── requirements.txt 
+└── README.md 
 ```
